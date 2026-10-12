@@ -26,3 +26,10 @@ CREATE TABLE IF NOT EXISTS cf_activity_events (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cf_activity_user_date ON cf_activity_events(user_id,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS cf_login_limits (
+  identity_hash TEXT PRIMARY KEY,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cf_login_limits_updated ON cf_login_limits(updated_at);
