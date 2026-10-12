@@ -1,0 +1,12 @@
+name = "codeflare-tools"
+main = "backend/src/index.js"
+compatibility_date = "2026-10-11"
+workers_dev = true
+
+# Link a NEW D1 database belonging to CodeFlare Tools, not Composer.
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "codeflare_tools_v5"
+# database_id = "REPLACE_WITH_TOOLS_D1_DATABASE_ID"
+
+# No auto-deploy and no Composer Worker bindings.
