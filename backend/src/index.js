@@ -65,6 +65,8 @@ el("register-form").onsubmit=e=>{e.preventDefault();if(!matches()){msg("Konfirma
 el("logout").onclick=async()=>{try{await api("/api/logout",{});await refresh();tab("login");msg("Anda sudah keluar.",true)}catch(e){msg(e.message)}};
 refresh();
 </script></body></html>`;
+
+const adminPage = String.raw`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CodeFlare Tools | Admin</title><style>*{box-sizing:border-box}body{margin:0;font:15px/1.55 system-ui;background:#f2f6fc;color:#182c44}header{background:#102b48;color:white;padding:20px 28px;display:flex;justify-content:space-between;align-items:center}header a{color:#b5ddff}main{max-width:1100px;margin:28px auto;padding:0 18px}h1{font-size:25px}.muted{color:#66788d}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0}.card,section{background:white;border:1px solid #dfe8f1;border-radius:13px;padding:20px}.card b{display:block;font-size:26px;color:#136fbb}section{margin-top:18px;overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:620px}td,th{padding:12px;border-bottom:1px solid #e7edf5;text-align:left}th{font-size:12px;color:#66788d}small{font-size:12px}button{background:#147bd1;color:white;border:0;border-radius:9px;padding:10px 14px;cursor:pointer}@media(max-width:700px){.grid{grid-template-columns:1fr}header{gap:12px}}</style></head><body><header><strong>CF · Admin Monitoring</strong><a href="/">Dashboard member</a></header><main><h1>Ringkasan operasional</h1><p class="muted">Khusus admin. Aktivitas yang ditampilkan adalah log aplikasi CodeFlare, bukan keputusan Google tentang validitas klik AdSense.</p><div class="grid"><div class="card"><small>Total member</small><b id="total">—</b></div><div class="card"><small>Event terbaru (30 hari)</small><b id="events">—</b></div><div class="card"><small>Status AdSense</small><b id="adsense" style="font-size:16px">—</b></div></div><section><h2>Daftar member</h2><table><thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Aktivitas terakhir</th></tr></thead><tbody id="members"><tr><td colspan="6">Memuat...</td></tr></tbody></table></section><section><h2>Aktivitas aplikasi terbaru</h2><table><thead><tr><th>Member</th><th>Jenis aktivitas</th><th>Waktu</th></tr></thead><tbody id="activity"><tr><td colspan="3">Memuat...</td></tr></tbody></table></section><p id="status" class="muted"></p></main><script>const el=id=>document.getElementById(id);const get=async path=>{const r=await fetch(path,{credentials:"same-origin"});const j=await r.json();if(!r.ok)throw Error(j.error||"Gagal mengambil data");return j};function row(parent,values){const tr=document.createElement("tr");values.forEach(v=>{const td=document.createElement("td");td.textContent=String(v??"—");tr.append(td)});parent.append(tr)}(async()=>{try{const [o,m,a]=await Promise.all([get("/api/admin/overview"),get("/api/admin/members"),get("/api/admin/activity")]);el("total").textContent=o.members;el("adsense").textContent=o.adsense_status==="not_connected"?"Belum terhubung":o.adsense_status;el("events").textContent=a.events.length;el("members").replaceChildren();el("activity").replaceChildren();m.members.forEach(x=>row(el("members"),[x.id,x.username,x.email,x.role,x.status,x.last_activity]));a.events.forEach(x=>row(el("activity"),[x.username,x.event_type,x.created_at]));if(!m.members.length)row(el("members"),["Belum ada member"]);if(!a.events.length)row(el("activity"),["Belum ada aktivitas"])}catch(e){el("status").textContent=e.message}})();</script></body></html>`;
 function json(data,status=200,headers={}){return Response.json(data,{status,headers:{"cache-control":"no-store","x-content-type-options":"nosniff",...headers}})}
 function cookie(request){const m=(request.headers.get("cookie")||"").match(/(?:^|;\s*)cf_tools_session=([^;]+)/);return m?.[1]||""}
 function setCookie(v,age){return COOKIE+"="+v+"; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age="+age}
@@ -81,14 +83,13 @@ async function activity(env,id,type){await env.DB.prepare("INSERT INTO cft_activ
 async function rateLimited(env,key){const now=Date.now(),bucket=Math.floor(now/900000),identity=await sha(key+":"+bucket);const r=await env.DB.prepare("SELECT attempts FROM cft_login_limits WHERE identity_hash=?").bind(identity).first();if(Number(r?.attempts||0)>=8)return true;await env.DB.prepare("INSERT INTO cft_login_limits(identity_hash,attempts,updated_at) VALUES(?,1,?) ON CONFLICT(identity_hash) DO UPDATE SET attempts=attempts+1,updated_at=excluded.updated_at").bind(identity,new Date().toISOString()).run();return false}
 export default {async fetch(request,env){
  const url=new URL(request.url),path=url.pathname,method=request.method;
- if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.2.0",dbConfigured:!!env.DB});
+ if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.3.0",dbConfigured:!!env.DB});
  if(method==="GET"&&path==="/")return new Response(page,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","content-security-policy":"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'self'","x-content-type-options":"nosniff"}});
  if(path==="/admin"&&method==="GET"){
   if(!env.DB)return json({ok:false,error:"Database tidak tersedia"},503);
-  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
-  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
-  const n=await env.DB.prepare("SELECT COUNT(*) AS count FROM cft_users").first();
-  return new Response('<!doctype html><html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CodeFlare Admin</title><style>body{font:15px system-ui;color:#16263c;background:#f3f6fb;margin:40px auto;max-width:700px;padding:20px}main{background:white;border-radius:15px;padding:28px;border:1px solid #dde6ee}</style><main><h1>CodeFlare Tools · Admin</h1><p>Scope admin terpisah dari member.</p><p>Jumlah akun member: '+Number(n?.count||0)+'</p><p>AdSense dan monitoring lanjutan belum terhubung.</p><a href="/">Kembali ke dashboard</a></main>',{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+  try{const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  return new Response(adminPage,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff","content-security-policy":"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'"}});
+  }catch(e){console.error("ADMIN PAGE ERROR",String(e));return json({ok:false,error:"Server error"},500)}
  }
  if(!path.startsWith("/api/"))return json({ok:false,error:"Not found"},404);
  if(!env.DB)return json({ok:false,error:"Database D1 belum terhubung"},503);
@@ -127,6 +128,21 @@ export default {async fetch(request,env){
   if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
   const n=await env.DB.prepare("SELECT COUNT(*) AS count FROM cft_users").first();
   return json({ok:true,scope:"admin",members:n?.count||0,adsense_status:"not_connected"});
+ }
+ if(path==="/api/admin/members"&&method==="GET"){
+  const u=await auth(request,env);
+  if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const rows=await env.DB.prepare("SELECT u.id,u.username,u.email,u.status,u.created_at,COALESCE(r.role,'member') AS role,(SELECT MAX(a.created_at) FROM cft_activity_events a WHERE a.user_id=u.id) AS last_activity FROM cft_users u LEFT JOIN cft_user_roles r ON r.user_id=u.id ORDER BY u.id DESC LIMIT 100").all();
+  return json({ok:true,scope:"admin",members:rows.results||[],limit:100});
+ }
+ if(path==="/api/admin/activity"&&method==="GET"){
+  const u=await auth(request,env);
+  if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const since=new Date(Date.now()-30*86400000).toISOString();
+  const rows=await env.DB.prepare("SELECT a.id,a.user_id,u.username,a.event_type,a.created_at FROM cft_activity_events a JOIN cft_users u ON u.id=a.user_id WHERE a.created_at>=? ORDER BY a.created_at DESC LIMIT 150").bind(since).all();
+  return json({ok:true,scope:"admin",events:rows.results||[],period_days:30});
  }
  if(path==="/api/activity"&&method==="GET"){const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);const d=new Date(Date.now()-30*86400000).toISOString();const r=await env.DB.prepare("SELECT event_type,created_at FROM cft_activity_events WHERE user_id=? AND created_at>=? ORDER BY created_at DESC LIMIT 200").bind(u.id,d).all();return json({ok:true,events:r.results||[]})}
  return json({ok:false,error:"Endpoint tidak ditemukan"},404);
