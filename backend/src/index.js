@@ -85,7 +85,7 @@ async function refresh(){
   const d=await api("/api/me");el("guest").classList.add("hidden");el("member").classList.remove("hidden");document.body.classList.add("member-mode");
   const user=d.user;const name=user.username||"Member",role=user.role||"member";
   el("hello-user").textContent=name;el("side-user").textContent=user.display_name||name;el("side-role").textContent=role;el("side-initial").textContent=name[0].toUpperCase();el("top-initial").textContent=name[0].toUpperCase();
-  el("display-name").value=user.display_name||name;renderAvatar(user);el("account-name").textContent=name;el("account-email").textContent=user.email;el("account-role").textContent=role;
+  el("display-name").value=user.display_name||name;renderAvatar(user);
   el("admin-link").classList.toggle("hidden",role!=="admin");
   const [a,summary]=await Promise.all([api("/api/activity"),api("/api/member/summary")]);
   fillRows("recent-rows",a.events.slice(0,6));fillRows("all-rows",a.events);
@@ -115,7 +115,7 @@ payMethod.onchange=()=>{const m=payMethod.value;if(m==="bca")payProvider.value="
 async function loadPayout(){try{const d=await api("/api/member/payout-account");if(!d.account)return;payMethod.value=d.account.method;payProvider.value=d.account.provider;el("pay-holder").value=d.account.account_holder;el("pay-number").value=d.account.account_number;payFee.textContent=d.account.method==="bca"?"Biaya transfer BCA: Rp0.":"Biaya transfer selain BCA: Rp3.000 dipotong dari pembayaran."}catch(e){el("pay-status").textContent="Informasi pembayaran belum tersedia."}}
 el("payout-form").onsubmit=async e=>{e.preventDefault();const btn=e.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;el("pay-status").textContent="Menyimpan...";try{await api("/api/member/payout-account",{method:payMethod.value,provider:payProvider.value,account_holder:el("pay-holder").value,account_number:el("pay-number").value});el("pay-status").textContent="Metode pembayaran berhasil disimpan."}catch(err){el("pay-status").textContent=err.message}finally{btn.disabled=false}};
 document.querySelector('[data-view="account"]').addEventListener("click",loadPayout);
-el("logout").onclick=async()=>{try{await api("/api/logout",{});await refresh();tab("login");msg("Anda sudah keluar.",true)}catch(e){msg(e.message)}};
+el("logout").onclick=async()=>{try{await api("/api/logout",{});dashboardLoaded=false;document.body.classList.remove("member-mode");el("member").classList.add("hidden");el("guest").classList.remove("hidden");tab("login");msg("Anda sudah keluar.",true)}catch(e){msg(e.message)}};
 window.onCftTurnstileReady=()=>{window.CFT_TURNSTILE_ENABLED=true;el("turnstile-slot").classList.remove("hidden");window.turnstile.render("#turnstile-slot",{sitekey:"__CFT_TURNSTILE_SITEKEY__",action:"member_access"})};
 refresh();
 </script>__CFT_TURNSTILE_SCRIPT__</body></html>`;
@@ -150,7 +150,7 @@ async function verifyTurnstile(request,env,token){
 export default {async fetch(request,env){
  const url=new URL(request.url),path=url.pathname,method=request.method;
  if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.8.2",dbConfigured:!!env.DB});
- if(method==="GET"&&path==="/"){const configured=!!(env.TURNSTILE_SITE_KEY&&env.TURNSTILE_SECRET);const html=page.replace("__CFT_TURNSTILE_SITEKEY__",configured?String(env.TURNSTILE_SITE_KEY):"").replace("__CFT_TURNSTILE_SCRIPT__",configured?'<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onCftTurnstileReady&render=explicit" async defer></script>':"");return new Response(html,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","content-security-policy":"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'self'","x-content-type-options":"nosniff"}});}
+ if(method==="GET"&&path==="/"){const configured=!!(env.TURNSTILE_SITE_KEY&&env.TURNSTILE_SECRET);const html=page.replace("__CFT_TURNSTILE_SITEKEY__",configured?String(env.TURNSTILE_SITE_KEY):"").replace("__CFT_TURNSTILE_SCRIPT__",configured?'<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onCftTurnstileReady&render=explicit" async defer></script>':"");return new Response(html,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","content-security-policy":"default-src 'none'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'self'","x-content-type-options":"nosniff"}});}
  if(path==="/admin"&&method==="GET"){
   if(!env.DB)return json({ok:false,error:"Database tidak tersedia"},503);
   try{const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
