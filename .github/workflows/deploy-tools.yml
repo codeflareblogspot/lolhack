@@ -1,5 +1,11 @@
-name: Deploy CodeFlare Tools (manual)
+name: Deploy CodeFlare Tools
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'database/migrations/**'
+      - '.github/workflows/deploy-tools.yml'
   workflow_dispatch:
     inputs:
       confirm_target:
@@ -13,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
-    if: ${{ inputs.confirm_target == 'codeflare-tools' }}
+    if: ${{ github.event_name == 'push' || inputs.confirm_target == 'codeflare-tools' }}
     runs-on: ubuntu-latest
     environment: codeflare-tools
     steps:
