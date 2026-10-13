@@ -83,7 +83,7 @@ async function activity(env,id,type){await env.DB.prepare("INSERT INTO cft_activ
 async function rateLimited(env,key){const now=Date.now(),bucket=Math.floor(now/900000),identity=await sha(key+":"+bucket);const r=await env.DB.prepare("SELECT attempts FROM cft_login_limits WHERE identity_hash=?").bind(identity).first();if(Number(r?.attempts||0)>=8)return true;await env.DB.prepare("INSERT INTO cft_login_limits(identity_hash,attempts,updated_at) VALUES(?,1,?) ON CONFLICT(identity_hash) DO UPDATE SET attempts=attempts+1,updated_at=excluded.updated_at").bind(identity,new Date().toISOString()).run();return false}
 export default {async fetch(request,env){
  const url=new URL(request.url),path=url.pathname,method=request.method;
- if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.3.0",dbConfigured:!!env.DB});
+ if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.4.0",dbConfigured:!!env.DB});
  if(method==="GET"&&path==="/")return new Response(page,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","content-security-policy":"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'self'","x-content-type-options":"nosniff"}});
  if(path==="/admin"&&method==="GET"){
   if(!env.DB)return json({ok:false,error:"Database tidak tersedia"},503);
@@ -122,6 +122,23 @@ export default {async fetch(request,env){
   const activityRows=await env.DB.prepare("SELECT substr(created_at,1,10) AS day,COUNT(*) AS events FROM cft_activity_events WHERE user_id=? AND created_at>=? GROUP BY substr(created_at,1,10) ORDER BY day").bind(u.id,since).all();
   const incomeRows=await env.DB.prepare("SELECT currency,SUM(amount_micros) AS micros FROM cft_member_earnings WHERE user_id=? AND report_date>=? GROUP BY currency").bind(u.id,since).all();
   return json({ok:true,scope:"member",period_days:30,activity:activityRows.results||[],earnings:incomeRows.results||[],earnings_state:incomeRows.results?.length?"available":"not_available"});
+ }
+ if(path==="/api/member/pageview"&&method==="POST"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const b=await readBody(request);
+  const pathValue=String(b?.path||"").slice(0,240);
+  if(!pathValue.startsWith("/")||pathValue.startsWith("//"))return json({ok:false,error:"Path tidak valid"},400);
+  const today=new Date().toISOString().slice(0,10);
+  const now=new Date().toISOString();
+  await env.DB.prepare("INSERT INTO cft_activity_daily(user_id,day,page_views) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET page_views=page_views+1").bind(u.id,today).run();
+  return json({ok:true,recorded_at:now});
+ }
+ if(path==="/api/admin/risk"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const since=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+  const rows=await env.DB.prepare("SELECT a.user_id,u.username,SUM(a.page_views) AS page_views,COUNT(*) AS active_days FROM cft_activity_daily a JOIN cft_users u ON u.id=a.user_id WHERE a.day>=? GROUP BY a.user_id,u.username ORDER BY page_views DESC LIMIT 100").bind(since).all();
+  return json({ok:true,scope:"admin",period_days:30,signals:(rows.results||[]).map(x=>({user_id:x.user_id,username:x.username,page_views:x.page_views,active_days:x.active_days,review_suggested:Number(x.page_views)>1000,note:"Indikator internal; bukan bukti klik AdSense invalid."}))});
  }
  if(path==="/api/admin/overview"&&method==="GET"){
   const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
