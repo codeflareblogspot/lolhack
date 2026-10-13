@@ -249,7 +249,8 @@ export default {async fetch(request,env){
   const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
   const leader=await env.DB.prepare("SELECT l.leader_id,u.username FROM cft_member_leaders l JOIN cft_users u ON u.id=l.leader_id WHERE l.member_id=?").bind(u.id).first();
   const rows=await env.DB.prepare("SELECT title,body,target_url,content_type FROM cft_admin_content WHERE active=1 ORDER BY id DESC LIMIT 30").all();
-  return json({ok:true,rank:"Member",leader:leader||null,announcements:(rows.results||[]).filter(x=>x.content_type==="announcement"),links:(rows.results||[]).filter(x=>x.content_type==="adsterra")});
+  const downline=await env.DB.prepare("SELECT COUNT(*) AS n FROM cft_member_leaders WHERE leader_id=?").bind(u.id).first();
+  return json({ok:true,rank:Number(downline?.n||0)>0?"Leader":"Member",leader:leader||null,announcements:(rows.results||[]).filter(x=>x.content_type==="announcement"),links:(rows.results||[]).filter(x=>x.content_type==="adsterra")});
  }
  if(path==="/api/member/leader-messages"&&method==="GET"){
   const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
