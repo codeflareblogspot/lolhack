@@ -40,6 +40,7 @@ jobs:
           [[ "$D1_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "Missing/invalid CODEFLARE_TOOLS_D1_DATABASE_ID"; exit 1; }
           test -f backend/src/index.js
           node --check backend/src/index.js
+          node tests/contracts.mjs
       - name: Write Tools-only Wrangler config
         env:
           D1_ID: ${{ vars.CODEFLARE_TOOLS_D1_DATABASE_ID }}
