@@ -1,5 +1,5 @@
 /* CodeFlare Tools v5.1.0 — isolated member API; NOT CodeFlare Composer */
-const ITERATIONS = 160000;
+const ITERATIONS = 100000;
 const SESSION_SECONDS = 7 * 24 * 3600;
 const COOKIE = "cf_tools_session";
 const encoder = new TextEncoder();
