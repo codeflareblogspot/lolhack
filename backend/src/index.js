@@ -84,7 +84,7 @@ async function refresh(){
   const d=await api("/api/me");el("guest").classList.add("hidden");el("member").classList.remove("hidden");document.body.classList.add("member-mode");
   const user=d.user;const name=user.username||"Member",role=user.role||"member";
   el("hello-user").textContent=name;el("side-user").textContent=user.display_name||name;el("side-role").textContent=role;el("side-initial").textContent=name[0].toUpperCase();el("top-initial").textContent=name[0].toUpperCase();
-  el("display-name").value=user.display_name||name;renderAvatar(user);el("profile-name").textContent=user.display_name||name;el("profile-email").textContent=user.email;el("profile-role").textContent=role;el("account-name").textContent=name;el("account-email").textContent=user.email;el("account-role").textContent=role;
+  el("display-name").value=user.display_name||name;renderAvatar(user);el("account-name").textContent=name;el("account-email").textContent=user.email;el("account-role").textContent=role;
   el("admin-link").classList.toggle("hidden",role!=="admin");
   const [a,summary]=await Promise.all([api("/api/activity"),api("/api/member/summary")]);
   fillRows("recent-rows",a.events.slice(0,6));fillRows("all-rows",a.events);
@@ -94,7 +94,7 @@ async function refresh(){
   el("earnings-stat").textContent=earnings;el("earnings-detail").textContent=earnings;el("income-status").textContent=summary.earnings.length?"Tersedia":"Belum tersedia";
   if(!dashboardLoaded){dashboardLoaded=true;try{await api("/api/member/pageview",{path:"/"})}catch{}}
   try{const count=await api("/api/member/online");el("online-stat").textContent=count.online+" online";}catch{}showView("overview");msg("");
- }catch(e){dashboardLoaded=false;document.body.classList.remove("member-mode");el("guest").classList.remove("hidden");el("member").classList.add("hidden")}
+ }catch(e){console.error("Dashboard initialization failed",e);if(document.body.classList.contains("member-mode")){msg("Dashboard belum dapat memuat seluruh data. Silakan coba refresh.",false);return}dashboardLoaded=false;document.body.classList.remove("member-mode");el("guest").classList.remove("hidden");el("member").classList.add("hidden")}
 }
 async function perform(form,path,payload){const b=form.querySelector("button[type=submit]");b.disabled=true;msg("Sedang memproses...");try{await api(path,payload);await refresh();msg("Berhasil.",true)}catch(e){msg(e.message)}finally{b.disabled=false}}
 el("login-form").onsubmit=e=>{e.preventDefault();perform(e.currentTarget,"/api/login",{identity:el("ident").value,password:el("pass").value})};
