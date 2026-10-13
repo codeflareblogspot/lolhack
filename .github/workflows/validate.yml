@@ -12,4 +12,5 @@ jobs:
         with:
           node-version: '22'
       - run: node --check backend/src/index.js
+      - run: node tests/contracts.mjs
 # Intentionally no deployment job.
