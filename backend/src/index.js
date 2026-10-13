@@ -30,7 +30,7 @@ input:focus{border-color:#1887db;box-shadow:0 0 0 3px #1689e51c}input.invalid{bo
 .hidden{display:none!important}.footer{margin-top:25px;text-align:center;font-size:12px;color:#789}
 .list{padding-left:20px}hr{border:0;border-top:1px solid #e3ebf3;margin:20px 0}
 @media(max-width:800px){.layout{display:block}.brand{padding:23px 25px}.brand .logo{width:42px;height:42px;font-size:20px;margin-bottom:9px}.brand h1{font-size:23px;margin:0}.brand p,.brand .features{display:none}.right{padding:18px 14px}.panel{padding:24px 20px;border-radius:15px}}
-</style></head>
+.summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:20px 0}.summary-box{background:#eff6fd;border:1px solid #d8e8f7;padding:16px;border-radius:12px}.summary-box small{display:block;color:#576d84}.summary-box strong{display:block;font-size:19px;overflow-wrap:anywhere}@media(max-width:450px){.summary-grid{grid-template-columns:1fr}}</style></head>
 <body><div class="layout">
 <section class="brand"><div class="logo">CF</div><h1>Ruang aktivitas digital Anda.</h1><p>Kelola akun CodeFlare dan tinjau riwayat aktivitas dengan nyaman, aman, dan transparan.</p><ul class="features"><li>✓ Aktivitas akun dan sesi tersimpan</li><li>✓ Riwayat hingga 30 hari</li><li>✓ Kontrol akun dalam satu dashboard</li></ul></section>
 <section class="right"><main class="panel">
@@ -48,7 +48,7 @@ input:focus{border-color:#1887db;box-shadow:0 0 0 3px #1689e51c}input.invalid{bo
 <div class="field"><label for="confirm">Konfirmasi password</label><div class="password-wrap"><input id="confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><button type="button" class="reveal" data-for="confirm">Lihat</button></div><p class="hint" id="match-hint">Masukkan ulang password yang sama.</p></div>
 <button class="primary" type="submit">Buat akun member</button></form>
 </div>
-<section id="member" class="hidden"><div class="eyebrow">CodeFlare Tools</div><h2>Dashboard member</h2><p id="profile"></p><p class="muted">Riwayat aktivitas akun selama 30 hari. Analitik AdSense belum diaktifkan.</p><ul class="list" id="history"></ul><button id="logout" class="primary">Keluar akun</button></section>
+<section id="member" class="hidden"><div class="eyebrow">CodeFlare Tools</div><h2>Dashboard member</h2><p id="profile"></p><p class="muted">Riwayat aktivitas akun selama 30 hari. Analitik AdSense belum diaktifkan.</p><div class="summary-grid"><div class="summary-box"><small>Aktivitas 30 hari</small><strong id="activity-stat">—</strong></div><div class="summary-box"><small>Penghasilan AdSense untuk akun ini</small><strong id="earnings-stat">Belum tersedia</strong></div></div><p class="hint">Penghasilan hanya muncul setelah atribusi dan verifikasi. Ini bukan seluruh pendapatan AdSense CodeFlare.</p><h3>Riwayat akun</h3><ul class="list" id="history"></ul><a id="admin-link" class="hidden" href="/admin">Buka Admin Panel</a><button id="logout" class="primary">Keluar akun</button></section>
 <p id="msg" class="message" role="status" aria-live="polite"></p><div class="footer">Secure member access · CodeFlare</div></main></section></div>
 <script>
 const el=id=>document.getElementById(id),msg=(t,ok=false)=>{el("msg").textContent=t;el("msg").classList.toggle("ok",ok)};
@@ -58,7 +58,7 @@ el("tab-login").onclick=()=>tab("login");el("tab-register").onclick=()=>tab("reg
 document.querySelectorAll(".reveal").forEach(b=>b.onclick=()=>{const x=el(b.dataset.for);x.type=x.type==="password"?"text":"password";b.textContent=x.type==="password"?"Lihat":"Tutup"});
 function matches(){const a=el("newpass").value,b=el("confirm").value,ok=!b||a===b;el("confirm").classList.toggle("invalid",!ok);el("match-hint").textContent=b?(ok?"Password cocok.":"Konfirmasi password tidak sama."):"Masukkan ulang password yang sama.";return ok}
 el("newpass").addEventListener("input",matches);el("confirm").addEventListener("input",matches);
-async function refresh(){try{const d=await api("/api/me");el("guest").classList.add("hidden");el("member").classList.remove("hidden");el("profile").textContent=d.user.username+" · "+d.user.email;const a=await api("/api/activity");const rows=a.events.map(x=>{const li=document.createElement("li");li.textContent=x.event_type+" · "+x.created_at;return li});el("history").replaceChildren(...rows);msg("")}catch(e){el("guest").classList.remove("hidden");el("member").classList.add("hidden")}}
+async function refresh(){try{const d=await api("/api/me");el("guest").classList.add("hidden");el("member").classList.remove("hidden");el("profile").textContent=d.user.username+" · "+d.user.email;const a=await api("/api/activity");const rows=a.events.map(x=>{const li=document.createElement("li");li.textContent=x.event_type+" · "+x.created_at;return li});el("history").replaceChildren(...rows);const summary=await api("/api/member/summary");el("activity-stat").textContent=String(summary.activity.reduce((a,x)=>a+Number(x.events||0),0));el("earnings-stat").textContent=summary.earnings.length?summary.earnings.map(x=>x.currency+" "+(Number(x.micros)/1000000).toFixed(2)).join(" · "):"Belum tersedia";el("admin-link").classList.toggle("hidden",d.user.role!=="admin");msg("")}catch(e){el("guest").classList.remove("hidden");el("member").classList.add("hidden")}}
 async function perform(form,path,payload){const b=form.querySelector("button[type=submit]");b.disabled=true;msg("Sedang memproses...");try{await api(path,payload);await refresh();msg("Berhasil.",true)}catch(e){msg(e.message)}finally{b.disabled=false}}
 el("login-form").onsubmit=e=>{e.preventDefault();perform(e.currentTarget,"/api/login",{identity:el("ident").value,password:el("pass").value})};
 el("register-form").onsubmit=e=>{e.preventDefault();if(!matches()){msg("Konfirmasi password belum cocok.");return}perform(e.currentTarget,"/api/register",{username:el("user").value,email:el("email").value,password:el("newpass").value})};
@@ -75,14 +75,21 @@ async function hashPassword(password,salt){const key=await crypto.subtle.importK
 function ctEqual(a,b){if(a.length!==b.length)return false;let t=0;for(let i=0;i<a.length;i++)t|=a.charCodeAt(i)^b.charCodeAt(i);return t===0}
 function validOrigin(request){const o=request.headers.get("origin");return !!o && o===new URL(request.url).origin}
 async function readBody(request){try{if(Number(request.headers.get("content-length")||0)>4096)return null;return await request.json()}catch{return null}}
-async function auth(request,env){const t=cookie(request);if(!/^[a-f0-9]{64}$/.test(t))return null;return env.DB.prepare("SELECT u.id,u.username,u.email FROM cft_sessions s JOIN cft_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active' LIMIT 1").bind(await sha(t),new Date().toISOString()).first()}
+async function auth(request,env){const t=cookie(request);if(!/^[a-f0-9]{64}$/.test(t))return null;return env.DB.prepare("SELECT u.id,u.username,u.email,COALESCE(r.role,'member') AS role FROM cft_sessions s JOIN cft_users u ON u.id=s.user_id LEFT JOIN cft_user_roles r ON r.user_id=u.id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active' LIMIT 1").bind(await sha(t),new Date().toISOString()).first()}
 async function newSession(userId,env){const token=randomHex(),now=new Date(),expires=new Date(now.getTime()+SESSION_SECONDS*1000).toISOString();await env.DB.prepare("INSERT INTO cft_sessions(user_id,token_hash,created_at,expires_at) VALUES(?,?,?,?)").bind(userId,await sha(token),now.toISOString(),expires).run();return token}
 async function activity(env,id,type){await env.DB.prepare("INSERT INTO cft_activity_events(user_id,event_type,page_path,created_at) VALUES(?,?,?,?)").bind(id,type,null,new Date().toISOString()).run()}
 async function rateLimited(env,key){const now=Date.now(),bucket=Math.floor(now/900000),identity=await sha(key+":"+bucket);const r=await env.DB.prepare("SELECT attempts FROM cft_login_limits WHERE identity_hash=?").bind(identity).first();if(Number(r?.attempts||0)>=8)return true;await env.DB.prepare("INSERT INTO cft_login_limits(identity_hash,attempts,updated_at) VALUES(?,1,?) ON CONFLICT(identity_hash) DO UPDATE SET attempts=attempts+1,updated_at=excluded.updated_at").bind(identity,new Date().toISOString()).run();return false}
 export default {async fetch(request,env){
  const url=new URL(request.url),path=url.pathname,method=request.method;
- if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.1.0",dbConfigured:!!env.DB});
+ if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.2.0",dbConfigured:!!env.DB});
  if(method==="GET"&&path==="/")return new Response(page,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","content-security-policy":"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'self'","x-content-type-options":"nosniff"}});
+ if(path==="/admin"&&method==="GET"){
+  if(!env.DB)return json({ok:false,error:"Database tidak tersedia"},503);
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const n=await env.DB.prepare("SELECT COUNT(*) AS count FROM cft_users").first();
+  return new Response('<!doctype html><html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CodeFlare Admin</title><style>body{font:15px system-ui;color:#16263c;background:#f3f6fb;margin:40px auto;max-width:700px;padding:20px}main{background:white;border-radius:15px;padding:28px;border:1px solid #dde6ee}</style><main><h1>CodeFlare Tools · Admin</h1><p>Scope admin terpisah dari member.</p><p>Jumlah akun member: '+Number(n?.count||0)+'</p><p>AdSense dan monitoring lanjutan belum terhubung.</p><a href="/">Kembali ke dashboard</a></main>',{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+ }
  if(!path.startsWith("/api/"))return json({ok:false,error:"Not found"},404);
  if(!env.DB)return json({ok:false,error:"Database D1 belum terhubung"},503);
  if(method==="POST"&&!validOrigin(request))return json({ok:false,error:"Origin tidak diizinkan"},403);
@@ -108,6 +115,19 @@ export default {async fetch(request,env){
  }
  if(path==="/api/logout"&&method==="POST"){const t=cookie(request);if(t)await env.DB.prepare("DELETE FROM cft_sessions WHERE token_hash=?").bind(await sha(t)).run();return json({ok:true},200,{"set-cookie":setCookie("",0)})}
  if(path==="/api/me"&&method==="GET"){const u=await auth(request,env);return u?json({ok:true,user:u}):json({ok:false,error:"Login diperlukan"},401)}
+ if(path==="/api/member/summary"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const since=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+  const activityRows=await env.DB.prepare("SELECT substr(created_at,1,10) AS day,COUNT(*) AS events FROM cft_activity_events WHERE user_id=? AND created_at>=? GROUP BY substr(created_at,1,10) ORDER BY day").bind(u.id,since).all();
+  const incomeRows=await env.DB.prepare("SELECT currency,SUM(amount_micros) AS micros FROM cft_member_earnings WHERE user_id=? AND report_date>=? GROUP BY currency").bind(u.id,since).all();
+  return json({ok:true,scope:"member",period_days:30,activity:activityRows.results||[],earnings:incomeRows.results||[],earnings_state:incomeRows.results?.length?"available":"not_available"});
+ }
+ if(path==="/api/admin/overview"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const n=await env.DB.prepare("SELECT COUNT(*) AS count FROM cft_users").first();
+  return json({ok:true,scope:"admin",members:n?.count||0,adsense_status:"not_connected"});
+ }
  if(path==="/api/activity"&&method==="GET"){const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);const d=new Date(Date.now()-30*86400000).toISOString();const r=await env.DB.prepare("SELECT event_type,created_at FROM cft_activity_events WHERE user_id=? AND created_at>=? ORDER BY created_at DESC LIMIT 200").bind(u.id,d).all();return json({ok:true,events:r.results||[]})}
  return json({ok:false,error:"Endpoint tidak ditemukan"},404);
  }catch(e){console.error("TOOLS V5 MEMBER ERROR",String(e));return json({ok:false,error:"Terjadi kesalahan server"},500)}
