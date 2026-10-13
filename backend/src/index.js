@@ -264,6 +264,32 @@ export default {async fetch(request,env){
   const rows=await env.DB.prepare("SELECT a.id,a.user_id,u.username,a.event_type,a.created_at FROM cft_activity_events a JOIN cft_users u ON u.id=a.user_id WHERE a.created_at>=? ORDER BY a.created_at DESC LIMIT 150").bind(since).all();
   return json({ok:true,scope:"admin",events:rows.results||[],period_days:30});
  }
+ if(path==="/api/member/payout-account"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const a=await env.DB.prepare("SELECT method,provider,account_holder,account_number,updated_at FROM cft_payout_accounts WHERE user_id=?").bind(u.id).first();
+  return json({ok:true,account:a||null});
+ }
+ if(path==="/api/member/payout-account"&&method==="POST"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const b=await readBody(request);if(!b)return json({ok:false,error:"Data tidak valid"},400);
+  const method=String(b.method||""),provider=String(b.provider||"").trim(),holder=String(b.account_holder||"").trim(),number=String(b.account_number||"").trim();
+  if(!["bca","bank_other","dana","ovo","gopay","shopeepay","other"].includes(method)||!provider||provider.length>60||holder.length<3||holder.length>100||!/^[+0-9 -]{6,32}$/.test(number))return json({ok:false,error:"Data tujuan transfer tidak valid"},400);
+  if(method==="bca"&&provider.toLowerCase()!=="bca")return json({ok:false,error:"Metode BCA hanya untuk rekening BCA"},400);
+  await env.DB.prepare("INSERT INTO cft_payout_accounts(user_id,method,provider,account_holder,account_number,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET method=excluded.method,provider=excluded.provider,account_holder=excluded.account_holder,account_number=excluded.account_number,updated_at=excluded.updated_at").bind(u.id,method,provider,holder,number,new Date().toISOString()).run();
+  return json({ok:true});
+ }
+ if(path==="/api/admin/payout-report"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const month=url.searchParams.get("month")||new Date().toISOString().slice(0,7);
+  if(!/^\\d{4}-(0[1-9]|1[0-2])$/.test(month))return json({ok:false,error:"Periode tidak valid"},400);
+  const due=month+"-15";
+  const rows=await env.DB.prepare("SELECT p.member_id,u.username,p.source_code,SUM(p.gross_rupiah) AS gross_rupiah,a.method,a.provider,a.account_holder,a.account_number FROM cft_payout_items p JOIN cft_users u ON u.id=p.member_id LEFT JOIN cft_payout_accounts a ON a.user_id=p.member_id WHERE p.status='verified' AND p.period_end<? GROUP BY p.member_id,p.source_code,u.username,a.method,a.provider,a.account_holder,a.account_number ORDER BY u.username,p.source_code").bind(due).all();
+  const data=new Map();
+  for(const row of rows.results||[]){let x=data.get(row.member_id);if(!x){x={member_id:row.member_id,username:row.username,method:row.method,provider:row.provider,account_holder:row.account_holder,account_number:row.account_number,sources:{adsense:0,adsterra:0,affiliate:0}};data.set(row.member_id,x)}x.sources[row.source_code]=Number(row.gross_rupiah)}
+  const result=[...data.values()].map(x=>{const gross=x.sources.adsense+x.sources.adsterra+x.sources.affiliate;const fee=x.method==="bca"?0:3000;return {...x,gross_rupiah:gross,fee_rupiah:fee,net_rupiah:Math.max(0,gross-fee),status:!x.method?"missing_destination":gross<=fee?"below_fee":"ready_for_manual_review"}});
+  return json({ok:true,scope:"admin",month,payment_date:due,source_types:["adsense","adsterra","affiliate"],fee_other_than_bca_rupiah:3000,items:result,automation:"report_only_no_transfer",note:"Hanya item terverifikasi sebelum tanggal 15. Data belum dibayar harus direkonsiliasi; tidak ada transfer otomatis."});
+ }
  if(path==="/api/admin/commission/preview"&&method==="POST"){
   const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
   if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
