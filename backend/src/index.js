@@ -114,13 +114,13 @@ async function hashPassword(password,salt){const key=await crypto.subtle.importK
 function ctEqual(a,b){if(a.length!==b.length)return false;let t=0;for(let i=0;i<a.length;i++)t|=a.charCodeAt(i)^b.charCodeAt(i);return t===0}
 function validOrigin(request){const o=request.headers.get("origin");return !!o && o===new URL(request.url).origin}
 async function readBody(request){try{if(Number(request.headers.get("content-length")||0)>4096)return null;return await request.json()}catch{return null}}
-async function auth(request,env){const t=cookie(request);if(!/^[a-f0-9]{64}$/.test(t))return null;return env.DB.prepare("SELECT u.id,u.username,u.email,COALESCE(r.role,'member') AS role FROM cft_sessions s JOIN cft_users u ON u.id=s.user_id LEFT JOIN cft_user_roles r ON r.user_id=u.id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active' LIMIT 1").bind(await sha(t),new Date().toISOString()).first()}
+async function auth(request,env){const t=cookie(request);if(!/^[a-f0-9]{64}$/.test(t))return null;return env.DB.prepare("SELECT u.id,u.username,u.email,COALESCE(r.role,'member') AS role,COALESCE(p.display_name,'') AS display_name,p.avatar_data FROM cft_sessions s JOIN cft_users u ON u.id=s.user_id LEFT JOIN cft_user_roles r ON r.user_id=u.id LEFT JOIN cft_member_profiles p ON p.user_id=u.id WHERE s.token_hash=? AND s.expires_at>? AND u.status='active' LIMIT 1").bind(await sha(t),new Date().toISOString()).first()}
 async function newSession(userId,env){const token=randomHex(),now=new Date(),expires=new Date(now.getTime()+SESSION_SECONDS*1000).toISOString();await env.DB.prepare("INSERT INTO cft_sessions(user_id,token_hash,created_at,expires_at) VALUES(?,?,?,?)").bind(userId,await sha(token),now.toISOString(),expires).run();return token}
 async function activity(env,id,type){await env.DB.prepare("INSERT INTO cft_activity_events(user_id,event_type,page_path,created_at) VALUES(?,?,?,?)").bind(id,type,null,new Date().toISOString()).run()}
 async function rateLimited(env,key){const now=Date.now(),bucket=Math.floor(now/900000),identity=await sha(key+":"+bucket);const r=await env.DB.prepare("SELECT attempts FROM cft_login_limits WHERE identity_hash=?").bind(identity).first();if(Number(r?.attempts||0)>=8)return true;await env.DB.prepare("INSERT INTO cft_login_limits(identity_hash,attempts,updated_at) VALUES(?,1,?) ON CONFLICT(identity_hash) DO UPDATE SET attempts=attempts+1,updated_at=excluded.updated_at").bind(identity,new Date().toISOString()).run();return false}
 export default {async fetch(request,env){
  const url=new URL(request.url),path=url.pathname,method=request.method;
- if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.5.0",dbConfigured:!!env.DB});
+ if(method==="GET"&&path==="/health")return json({ok:true,app:"CodeFlare Tools",version:"5.6.0",dbConfigured:!!env.DB});
  if(method==="GET"&&path==="/")return new Response(page,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","content-security-policy":"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'self'","x-content-type-options":"nosniff"}});
  if(path==="/admin"&&method==="GET"){
   if(!env.DB)return json({ok:false,error:"Database tidak tersedia"},503);
@@ -153,6 +153,63 @@ export default {async fetch(request,env){
  }
  if(path==="/api/logout"&&method==="POST"){const t=cookie(request);if(t)await env.DB.prepare("DELETE FROM cft_sessions WHERE token_hash=?").bind(await sha(t)).run();return json({ok:true},200,{"set-cookie":setCookie("",0)})}
  if(path==="/api/me"&&method==="GET"){const u=await auth(request,env);return u?json({ok:true,user:u}):json({ok:false,error:"Login diperlukan"},401)}
+ if(path==="/api/member/online"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const since=new Date(Date.now()-15*60000).toISOString();
+  const r=await env.DB.prepare("SELECT COUNT(DISTINCT s.user_id) AS online FROM cft_sessions s WHERE s.expires_at>? AND EXISTS (SELECT 1 FROM cft_activity_events a WHERE a.user_id=s.user_id AND a.created_at>=?)").bind(new Date().toISOString(),since).first();
+  return json({ok:true,online:Number(r?.online||0),definition:"Aktif dalam 15 menit terakhir"});
+ }
+ if(path==="/api/member/profile"&&method==="POST"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const b=await readBody(request);if(!b)return json({ok:false,error:"Data tidak valid"},400);
+  const name=String(b.display_name||"").trim();
+  if(name.length<2||name.length>60||/[<>\u0000-\u001f]/.test(name))return json({ok:false,error:"Nama harus 2–60 karakter"},400);
+  let avatar=String(b.avatar_data||"");
+  if(avatar&&!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(avatar))return json({ok:false,error:"Format foto tidak didukung"},400);
+  if(avatar.length>92000)return json({ok:false,error:"Foto terlalu besar (maksimal sekitar 65 KB)"},400);
+  await env.DB.prepare("INSERT INTO cft_member_profiles(user_id,display_name,avatar_data,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name,avatar_data=excluded.avatar_data,updated_at=excluded.updated_at").bind(u.id,name,avatar||null,new Date().toISOString()).run();
+  return json({ok:true});
+ }
+ if(path==="/api/member/password"&&method==="POST"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const b=await readBody(request);if(!b)return json({ok:false,error:"Data tidak valid"},400);
+  const old=String(b.current_password||""),next=String(b.new_password||"");
+  if(next.length<12||next.length>128||next!==String(b.confirm_password||""))return json({ok:false,error:"Password baru minimal 12 karakter dan konfirmasi harus cocok"},400);
+  if(await rateLimited(env,"password:"+u.id))return json({ok:false,error:"Terlalu banyak percobaan. Coba lagi nanti."},429);
+  const row=await env.DB.prepare("SELECT password_hash FROM cft_users WHERE id=?").bind(u.id).first(),parts=String(row?.password_hash||"").split(":");
+  if(parts.length!==4||parts[0]!=="pbkdf2-sha256"||!/^\d+$/.test(parts[1])||Number(parts[1])>100000||Number(parts[1])<10000||!ctEqual(await hashPassword(old,parts[2]),parts[3]))return json({ok:false,error:"Password saat ini salah"},403);
+  const salt=randomHex(16),hash=await hashPassword(next,salt);
+  await env.DB.prepare("UPDATE cft_users SET password_hash=?,updated_at=? WHERE id=?").bind("pbkdf2-sha256:"+ITERATIONS+":"+salt+":"+hash,new Date().toISOString(),u.id).run();
+  await env.DB.prepare("DELETE FROM cft_sessions WHERE user_id=?").bind(u.id).run();
+  return json({ok:true,login_again:true},200,{"set-cookie":setCookie("",0)});
+ }
+ if(path==="/api/member/support"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const r=await env.DB.prepare("SELECT sender_role,body,created_at FROM (SELECT sender_role,body,created_at,id FROM cft_support_messages WHERE user_id=? ORDER BY id DESC LIMIT 100) ORDER BY id ASC").bind(u.id).all();
+  return json({ok:true,messages:r.results||[]});
+ }
+ if(path==="/api/member/support"&&method==="POST"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  const b=await readBody(request),body=String(b?.body||"").trim();
+  if(body.length<1||body.length>1500)return json({ok:false,error:"Pesan harus 1–1500 karakter"},400);
+  if(await rateLimited(env,"support:"+u.id))return json({ok:false,error:"Terlalu banyak pesan. Coba lagi nanti."},429);
+  await env.DB.prepare("INSERT INTO cft_support_messages(user_id,sender_role,body,created_at) VALUES(?,'member',?,?)").bind(u.id,body,new Date().toISOString()).run();
+  return json({ok:true});
+ }
+ if(path==="/api/admin/support"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const r=await env.DB.prepare("SELECT m.id,m.user_id,u.username,m.sender_role,m.body,m.created_at FROM cft_support_messages m JOIN cft_users u ON u.id=m.user_id ORDER BY m.id DESC LIMIT 100").all();
+  return json({ok:true,messages:r.results||[]});
+ }
+ if(path==="/api/admin/support"&&method==="POST"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const b=await readBody(request),id=Number(b?.user_id),body=String(b?.body||"").trim();
+  if(!Number.isSafeInteger(id)||id<1||body.length<1||body.length>1500)return json({ok:false,error:"Data pesan tidak valid"},400);
+  const member=await env.DB.prepare("SELECT id FROM cft_users WHERE id=?").bind(id).first();if(!member)return json({ok:false,error:"Member tidak ditemukan"},404);
+  await env.DB.prepare("INSERT INTO cft_support_messages(user_id,sender_role,body,created_at) VALUES(?,'admin',?,?)").bind(id,body,new Date().toISOString()).run();return json({ok:true});
+ }
  if(path==="/api/member/summary"&&method==="GET"){
   const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
   const since=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
