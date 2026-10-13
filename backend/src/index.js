@@ -3,7 +3,68 @@ const ITERATIONS = 100000;
 const SESSION_SECONDS = 7 * 24 * 3600;
 const COOKIE = "cf_tools_session";
 const encoder = new TextEncoder();
-const page = String.raw`<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CodeFlare Tools</title><style>:root{font:15px/1.6 system-ui;color:#203047;background:#f2f6fc}body{margin:0}header{background:#112a47;color:white;padding:17px 24px;font-weight:700}main{max-width:680px;margin:30px auto;padding:22px;background:white;border:1px solid #dce6f1;border-radius:16px}input,button{font:inherit;padding:10px;border-radius:9px;margin:4px 0 12px;width:100%;box-sizing:border-box}input{border:1px solid #b7c6d8}button{background:#176fd1;color:white;border:0;cursor:pointer}button.secondary{background:#e7eff9;color:#193b62}.hidden{display:none}.hint{color:#586779}#msg{min-height:23px}ul{padding-left:20px}</style></head><body><header>CodeFlare Tools · Member v5.1</header><main><section id="guest"><h2>Masuk Member</h2><input id="ident" placeholder="Username atau email" autocomplete="username"><input id="pass" type="password" placeholder="Password" autocomplete="current-password"><button id="login">Masuk</button><hr><h2>Daftar Member</h2><input id="user" placeholder="Username (3–32 karakter)" autocomplete="username"><input id="email" type="email" placeholder="Alamat email" autocomplete="email"><input id="newpass" type="password" placeholder="Password minimal 12 karakter" autocomplete="new-password"><button id="register" class="secondary">Daftar</button></section><section id="member" class="hidden"><h2>Dashboard Member</h2><p id="profile"></p><p class="hint">Riwayat aktivitas akun 30 hari. Pelacakan aktivitas iklan dan integrasi AdSense belum aktif.</p><ul id="history"></ul><button id="logout" class="secondary">Keluar</button></section><p id="msg" role="status"></p></main><script>const $=x=>document.getElementById(x);const req=async(url,data)=>{const r=await fetch(url,{method:data?"POST":"GET",headers:data?{"content-type":"application/json"}:{},body:data?JSON.stringify(data):undefined,credentials:"same-origin"});let j=await r.json();if(!r.ok)throw Error(j.error||"Permintaan gagal");return j};const show=async()=>{try{let d=await req("/api/me");$("guest").classList.add("hidden");$("member").classList.remove("hidden");$("profile").textContent=d.user.username+" · "+d.user.email;const h=await req("/api/activity");$("history").replaceChildren(...h.events.map(x=>{let li=document.createElement("li");li.textContent=x.event_type+" · "+x.created_at;return li}));}catch(e){$("guest").classList.remove("hidden");$("member").classList.add("hidden")}};const submit=async(url,data)=>{try{$("msg").textContent="Memproses...";await req(url,data);$("msg").textContent="Berhasil";await show()}catch(e){$("msg").textContent=e.message}};$("login").onclick=()=>submit("/api/login",{identity:$("ident").value,password:$("pass").value});$("register").onclick=()=>submit("/api/register",{username:$("user").value,email:$("email").value,password:$("newpass").value});$("logout").onclick=async()=>{await submit("/api/logout",{});await show()};show();</script></body></html>`;
+const page = String.raw`<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CodeFlare Tools | Member Access</title>
+<style>
+:root{color-scheme:light;font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:#f3f6fb;color:#14243b}
+*{box-sizing:border-box}body{margin:0;min-height:100vh}.layout{min-height:100vh;display:grid;grid-template-columns:minmax(300px,1fr) minmax(360px,1fr)}
+.brand{padding:clamp(30px,6vw,90px);display:flex;flex-direction:column;justify-content:center;background:linear-gradient(135deg,#08233b,#103c65 65%,#145e9b);color:#fff}
+.logo{width:52px;height:52px;display:grid;place-items:center;background:#168de9;border-radius:15px;font-weight:800;font-size:24px;margin-bottom:38px}
+.brand h1{font-size:clamp(30px,4vw,48px);line-height:1.15;letter-spacing:-1.5px;max-width:490px;margin:0 0 16px}
+.brand p{color:#c2d9eb;max-width:460px;font-size:16px}.features{margin:26px 0 0;padding:0;list-style:none;color:#e4f1fb}.features li{padding:10px 0}
+.right{display:grid;place-items:center;padding:32px 22px}
+.panel{background:white;border:1px solid #dae4ef;border-radius:22px;box-shadow:0 18px 45px #203c6010;width:min(100%,470px);padding:clamp(24px,4vw,40px)}
+.eyebrow{font-size:12px;letter-spacing:1.8px;font-weight:800;color:#1479c6;text-transform:uppercase}
+h2{margin:8px 0 6px;font-size:27px;letter-spacing:-.6px}.muted{color:#63758c;margin:0 0 24px;font-size:14px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;background:#eef3fa;border-radius:12px;padding:5px;margin-bottom:23px}
+.tabs button{font-weight:700;border:0;padding:12px;border-radius:9px;background:transparent;color:#60758a;cursor:pointer;font:inherit}
+.tabs button.active{background:#fff;box-shadow:0 2px 8px #12345514;color:#136cba}
+label{display:block;font-size:13px;font-weight:700;margin:0 0 6px}
+.field{margin-bottom:16px}input{width:100%;background:#fff;border:1px solid #bcccdc;border-radius:10px;font:inherit;padding:12px 13px;outline:0;color:#14243b}
+input:focus{border-color:#1887db;box-shadow:0 0 0 3px #1689e51c}input.invalid{border-color:#d43a48}
+.password-wrap{display:flex;gap:8px}.password-wrap input{flex:1;min-width:0}
+.reveal{min-width:68px;border:1px solid #c4d2df;border-radius:10px;background:#f1f6fb;color:#315270;cursor:pointer;font-weight:700}
+.primary{width:100%;padding:13px;border:0;border-radius:11px;background:#167cdb;color:#fff;font-weight:750;cursor:pointer;font:inherit;margin-top:7px}.primary:hover{background:#096abc}.primary:disabled{opacity:.65;cursor:wait}
+.hint{font-size:12px;color:#64758a;margin:6px 0 0}.message{min-height:26px;margin-top:16px;font-size:13px;color:#ab2534}.message.ok{color:#087b58}
+.hidden{display:none!important}.footer{margin-top:25px;text-align:center;font-size:12px;color:#789}
+.list{padding-left:20px}hr{border:0;border-top:1px solid #e3ebf3;margin:20px 0}
+@media(max-width:800px){.layout{display:block}.brand{padding:23px 25px}.brand .logo{width:42px;height:42px;font-size:20px;margin-bottom:9px}.brand h1{font-size:23px;margin:0}.brand p,.brand .features{display:none}.right{padding:18px 14px}.panel{padding:24px 20px;border-radius:15px}}
+</style></head>
+<body><div class="layout">
+<section class="brand"><div class="logo">CF</div><h1>Ruang aktivitas digital Anda.</h1><p>Kelola akun CodeFlare dan tinjau riwayat aktivitas dengan nyaman, aman, dan transparan.</p><ul class="features"><li>✓ Aktivitas akun dan sesi tersimpan</li><li>✓ Riwayat hingga 30 hari</li><li>✓ Kontrol akun dalam satu dashboard</li></ul></section>
+<section class="right"><main class="panel">
+<div id="guest">
+<div class="eyebrow">CodeFlare Tools</div><h2 id="heading">Selamat datang</h2><p class="muted" id="intro">Masuk atau buat akun member baru.</p>
+<div class="tabs" role="tablist" aria-label="Akses member"><button id="tab-login" type="button" class="active" aria-selected="true">Masuk</button><button id="tab-register" type="button" aria-selected="false">Daftar akun</button></div>
+<form id="login-form">
+<div class="field"><label for="ident">Username atau email</label><input id="ident" name="identity" autocomplete="username" required></div>
+<div class="field"><label for="pass">Password</label><div class="password-wrap"><input id="pass" name="password" type="password" autocomplete="current-password" required><button type="button" class="reveal" data-for="pass">Lihat</button></div></div>
+<button class="primary" type="submit">Masuk ke dashboard</button></form>
+<form id="register-form" class="hidden">
+<div class="field"><label for="user">Username</label><input id="user" name="username" autocomplete="username" minlength="3" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" required><p class="hint">3–32 karakter; huruf, angka, atau garis bawah.</p></div>
+<div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+<div class="field"><label for="newpass">Password</label><div class="password-wrap"><input id="newpass" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><button type="button" class="reveal" data-for="newpass">Lihat</button></div><p class="hint">Minimal 12 karakter.</p></div>
+<div class="field"><label for="confirm">Konfirmasi password</label><div class="password-wrap"><input id="confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><button type="button" class="reveal" data-for="confirm">Lihat</button></div><p class="hint" id="match-hint">Masukkan ulang password yang sama.</p></div>
+<button class="primary" type="submit">Buat akun member</button></form>
+</div>
+<section id="member" class="hidden"><div class="eyebrow">CodeFlare Tools</div><h2>Dashboard member</h2><p id="profile"></p><p class="muted">Riwayat aktivitas akun selama 30 hari. Analitik AdSense belum diaktifkan.</p><ul class="list" id="history"></ul><button id="logout" class="primary">Keluar akun</button></section>
+<p id="msg" class="message" role="status" aria-live="polite"></p><div class="footer">Secure member access · CodeFlare</div></main></section></div>
+<script>
+const el=id=>document.getElementById(id),msg=(t,ok=false)=>{el("msg").textContent=t;el("msg").classList.toggle("ok",ok)};
+const api=async(path,data)=>{const opt={credentials:"same-origin"};if(data!==undefined){opt.method="POST";opt.headers={"content-type":"application/json"};opt.body=JSON.stringify(data)}const r=await fetch(path,opt);let d=await r.json();if(!r.ok)throw Error(d.error||"Permintaan gagal");return d};
+function tab(which){const reg=which==="register";el("login-form").classList.toggle("hidden",reg);el("register-form").classList.toggle("hidden",!reg);el("tab-login").classList.toggle("active",!reg);el("tab-register").classList.toggle("active",reg);el("tab-login").setAttribute("aria-selected",String(!reg));el("tab-register").setAttribute("aria-selected",String(reg));el("heading").textContent=reg?"Buat akun baru":"Selamat datang";el("intro").textContent=reg?"Isi data berikut untuk mendaftar sebagai member.":"Masuk untuk melihat dashboard dan aktivitas Anda.";msg("")}
+el("tab-login").onclick=()=>tab("login");el("tab-register").onclick=()=>tab("register");
+document.querySelectorAll(".reveal").forEach(b=>b.onclick=()=>{const x=el(b.dataset.for);x.type=x.type==="password"?"text":"password";b.textContent=x.type==="password"?"Lihat":"Tutup"});
+function matches(){const a=el("newpass").value,b=el("confirm").value,ok=!b||a===b;el("confirm").classList.toggle("invalid",!ok);el("match-hint").textContent=b?(ok?"Password cocok.":"Konfirmasi password tidak sama."):"Masukkan ulang password yang sama.";return ok}
+el("newpass").addEventListener("input",matches);el("confirm").addEventListener("input",matches);
+async function refresh(){try{const d=await api("/api/me");el("guest").classList.add("hidden");el("member").classList.remove("hidden");el("profile").textContent=d.user.username+" · "+d.user.email;const a=await api("/api/activity");const rows=a.events.map(x=>{const li=document.createElement("li");li.textContent=x.event_type+" · "+x.created_at;return li});el("history").replaceChildren(...rows);msg("")}catch(e){el("guest").classList.remove("hidden");el("member").classList.add("hidden")}}
+async function perform(form,path,payload){const b=form.querySelector("button[type=submit]");b.disabled=true;msg("Sedang memproses...");try{await api(path,payload);await refresh();msg("Berhasil.",true)}catch(e){msg(e.message)}finally{b.disabled=false}}
+el("login-form").onsubmit=e=>{e.preventDefault();perform(e.currentTarget,"/api/login",{identity:el("ident").value,password:el("pass").value})};
+el("register-form").onsubmit=e=>{e.preventDefault();if(!matches()){msg("Konfirmasi password belum cocok.");return}perform(e.currentTarget,"/api/register",{username:el("user").value,email:el("email").value,password:el("newpass").value})};
+el("logout").onclick=async()=>{try{await api("/api/logout",{});await refresh();tab("login");msg("Anda sudah keluar.",true)}catch(e){msg(e.message)}};
+refresh();
+</script></body></html>`;
 function json(data,status=200,headers={}){return Response.json(data,{status,headers:{"cache-control":"no-store","x-content-type-options":"nosniff",...headers}})}
 function cookie(request){const m=(request.headers.get("cookie")||"").match(/(?:^|;\s*)cf_tools_session=([^;]+)/);return m?.[1]||""}
 function setCookie(v,age){return COOKIE+"="+v+"; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age="+age}
