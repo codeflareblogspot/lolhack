@@ -57,10 +57,10 @@ jobs:
         run: |
           set -euo pipefail
           SQL="SELECT CASE WHEN
-            (SELECT COUNT(*) FROM pragma_table_info('cf_users') WHERE name IN ('id','username','email','password_hash','status','created_at','updated_at')) = 7
-            AND (SELECT COUNT(*) FROM pragma_table_info('cf_sessions') WHERE name IN ('user_id','token_hash','expires_at','created_at')) = 4
-            AND (SELECT COUNT(*) FROM pragma_table_info('cf_activity_events') WHERE name IN ('user_id','event_type','page_path','created_at')) = 4
-            AND (SELECT COUNT(*) FROM pragma_table_info('cf_login_limits') WHERE name IN ('identity_hash','attempts','updated_at')) = 3
+            (SELECT COUNT(*) FROM pragma_table_info('cft_users') WHERE name IN ('id','username','email','password_hash','status','created_at','updated_at')) = 7
+            AND (SELECT COUNT(*) FROM pragma_table_info('cft_sessions') WHERE name IN ('user_id','token_hash','expires_at','created_at')) = 4
+            AND (SELECT COUNT(*) FROM pragma_table_info('cft_activity_events') WHERE name IN ('user_id','event_type','page_path','created_at')) = 4
+            AND (SELECT COUNT(*) FROM pragma_table_info('cft_login_limits') WHERE name IN ('identity_hash','attempts','updated_at')) = 3
           THEN 1 ELSE 0 END AS schema_ok;"
           npx --yes wrangler@4 d1 execute codeflare_tools_v5 --remote --config wrangler.toml --command "$SQL" --json > schema-check.json
           node - <<'JS'
