@@ -264,6 +264,21 @@ export default {async fetch(request,env){
   const rows=await env.DB.prepare("SELECT a.id,a.user_id,u.username,a.event_type,a.created_at FROM cft_activity_events a JOIN cft_users u ON u.id=a.user_id WHERE a.created_at>=? ORDER BY a.created_at DESC LIMIT 150").bind(since).all();
   return json({ok:true,scope:"admin",events:rows.results||[],period_days:30});
  }
+ if(path==="/api/admin/commission/preview"&&method==="POST"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const b=await readBody(request);
+  const source=String(b?.source_type||""),currency=String(b?.currency||"IDR").toUpperCase(),raw=b?.net_minor;
+  if(!["adsense","product_service"].includes(source)||!/^[A-Z]{3}$/.test(currency)||typeof raw!=="number"||!Number.isSafeInteger(raw)||raw<0||raw>1e12)return json({ok:false,error:"Sumber, mata uang, atau nilai tidak valid"},400);
+  const admin=Math.floor(raw*40/100),activity=Math.floor(raw*24/100),network=Math.floor(raw*21/100),rank=raw-admin-activity-network;
+  return json({ok:true,mode:"preview_only",source_type:source,currency,net_minor:raw,admin_minor:admin,member:{activity_minor:activity,network_minor:network,rank_minor:rank,total_minor:raw-admin},compliance_status:"pending",payable:false,note:source==="adsense"?"Tidak boleh memberi insentif klik, tayangan iklan, atau perekrutan. Alokasi ini hanya simulasi sampai pemeriksaan kepatuhan selesai.":"Perlu bukti transaksi dan kontribusi nyata. Perekrutan semata tidak menghasilkan komisi."});
+ }
+ if(path==="/api/admin/commission/batches"&&method==="GET"){
+  const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);
+  if(u.role!=="admin")return json({ok:false,error:"Akses admin diperlukan"},403);
+  const r=await env.DB.prepare("SELECT id,source_type,source_reference,period_start,period_end,currency,net_minor,admin_minor,activity_minor,network_minor,rank_minor,status,compliance_status,created_at FROM cft_commission_batches ORDER BY id DESC LIMIT 100").all();
+  return json({ok:true,batches:r.results||[],payable:false});
+ }
  if(path==="/api/activity"&&method==="GET"){const u=await auth(request,env);if(!u)return json({ok:false,error:"Login diperlukan"},401);const d=new Date(Date.now()-30*86400000).toISOString();const r=await env.DB.prepare("SELECT event_type,created_at FROM cft_activity_events WHERE user_id=? AND created_at>=? ORDER BY created_at DESC LIMIT 200").bind(u.id,d).all();return json({ok:true,events:r.results||[]})}
  return json({ok:false,error:"Endpoint tidak ditemukan"},404);
  }catch(e){console.error("TOOLS V5 MEMBER ERROR",String(e));return json({ok:false,error:"Terjadi kesalahan server"},500)}
