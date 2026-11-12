@@ -14,5 +14,13 @@ for(const route of ['/api/register','/api/login','/api/logout','/api/me','/api/m
 assert.ok(worker.includes('verifyTurnstile(request,env,b.turnstile_token)'),'Turnstile server verification missing');
 assert.ok(worker.includes('https://challenges.cloudflare.com'),'Turnstile CSP/endpoint missing');
 assert.ok(worker.includes('u.role!=="admin"'),'Admin RBAC guard missing');
+for(const id of ['url-input','url-line-numbers','url-check-btn','url-clear-btn','url-result-body']){
+ assert.ok(ids.has(id),'Bulk URL Checker element missing: '+id);
+}
+assert.ok(page.includes('urlCheckBtn.onclick'),'Bulk URL Checker must run only from the manual button');
+assert.ok(page.includes('urlClearBtn.onclick'),'Bulk URL Checker clear control missing');
+assert.ok(worker.includes('path==="/api/tools/url-check"'),'Bulk URL Checker API route missing');
+assert.ok(worker.includes('redirect:"manual"'),'URL checker must validate redirect destinations');
+assert.ok(worker.includes('b.urls.length>25'),'URL checker batch limit missing');
 assert.ok(worker.includes('name = "codeflare-tools"')===false,'Do not embed Wrangler config inside app source');
 console.log('CodeFlare Tools module contract checks passed ('+binds.length+' UI bindings).');
