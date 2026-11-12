@@ -248,10 +248,19 @@ export default {async fetch(request,env){
    const started=Date.now();let target;
    try{target=validateTarget(item.input)}catch(e){return {...item,state:"error",httpStatus:null,finalUrl:null,durationMs:Date.now()-started,message:e.message}}
    const requestTarget=async method=>{
-    const response=await fetch(target,{method,redirect:"follow",headers:method==="GET"?{"range":"bytes=0-0"}:{"accept":"*/*"},signal:AbortSignal.timeout(8000)});
-    const result={status:response.status,finalUrl:response.url||target,redirected:response.redirected===true};
-    if(method==="GET"&&response.body)try{await response.body.cancel()}catch{}
-    return result;
+    let current=target,redirected=false;
+    for(let hop=0;hop<=5;hop++){
+     const response=await fetch(current,{method,redirect:"manual",headers:method==="GET"?{"range":"bytes=0-0"}:{"accept":"*/*"},signal:AbortSignal.timeout(8000)});
+     const location=response.headers.get("location");
+     if(response.status>=300&&response.status<400&&location&&hop<5){
+      try{current=validateTarget(new URL(location,current).toString())}catch{if(response.body)try{await response.body.cancel()}catch{};throw new Error("Redirect menuju host yang tidak diizinkan")}
+      redirected=true;if(response.body)try{await response.body.cancel()}catch{};continue;
+     }
+     const result={status:response.status,finalUrl:current,redirected};
+     if(method==="GET"&&response.body)try{await response.body.cancel()}catch{}
+     return result;
+    }
+    throw new Error("Terlalu banyak redirect");
    };
    try{
     let response=await requestTarget("HEAD");
